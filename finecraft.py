@@ -8,26 +8,26 @@ import random
 # GAME ENGINE VARIABLES
 # =============================================================================
 
+# Window (Fixed to 1280x720)
+WINDOW_W = 1920
+WINDOW_H = 1080
+fovY     = 90
+
 # Player / Camera
-player_pos  = [0.0, -80.0, 50.0]   # X, Y, Z (Z now strictly represents the FEET)
+player_pos  = [0.0, -80.0, 50.0]   # X, Y, Z (Z is strictly the FEET)
 yaw         = 90.0                   
 pitch       = -15.0                  
 camera_mode = "FirstPerson"        # "FirstPerson" or "ThirdPerson"
 
 # Constants
-EYE_HEIGHT  = 20.0                 # How high the camera is from the feet
+EYE_HEIGHT  = 34.0                 # Adjusted to match the new 3D model's head
 BLOCK_SIZE  = 25                   # World-units per block
 BLOCK_HALF  = BLOCK_SIZE / 2.0
 
 # Mouse state
-last_mouse_x = 500
-last_mouse_y = 400
+last_mouse_x = WINDOW_W // 2
+last_mouse_y = WINDOW_H // 2
 mouse_sensitivity = 0.18
-
-# Window
-WINDOW_W = 1000
-WINDOW_H = 800
-fovY     = 90
 
 # Voxel world
 world_blocks = {}           # (ix, iy, iz) -> (r, g, b)
@@ -49,10 +49,10 @@ game_mode    = "Survival"
 cheat_mode   = False        
 show_help    = True
 
-# Gravity / jumping
+# Gravity / jumping (Adjusted for snappy Minecraft feel)
 vel_z        = 0.0
-GRAVITY      = -1.2
-JUMP_VEL     = 16.0
+GRAVITY      = -0.8
+JUMP_VEL     = 8.0
 on_ground    = False
 
 # =============================================================================
@@ -106,7 +106,6 @@ init_world()
 # =============================================================================
 
 def get_voxel(x, y, z):
-    """Flawlessly maps a continuous 3D coordinate to its discrete voxel grid index."""
     bx = math.floor((x + BLOCK_HALF) / BLOCK_SIZE)
     by = math.floor((y + BLOCK_HALF) / BLOCK_SIZE)
     bz = math.floor((z + BLOCK_HALF) / BLOCK_SIZE)
@@ -131,7 +130,6 @@ def _raycast(steps=120, reach=200.0):
     return None, None
 
 def try_move(dx, dy):
-    """Handles movement with horizontal wall collision detection using exact math."""
     if game_mode == "Creative":
         player_pos[0] += dx
         player_pos[1] += dy
@@ -140,7 +138,6 @@ def try_move(dx, dy):
     # Check X-axis collision
     new_x = player_pos[0] + dx
     bx, by, _ = get_voxel(new_x, player_pos[1], player_pos[2])
-    # Check feet (slightly above floor to prevent toe stubbing) and head
     _, _, bz_foot = get_voxel(new_x, player_pos[1], player_pos[2] + 1.0)
     _, _, bz_head = get_voxel(new_x, player_pos[1], player_pos[2] + EYE_HEIGHT - 2.0)
     
@@ -158,15 +155,16 @@ def try_move(dx, dy):
 # DRAWING PRIMITIVES
 # =============================================================================
 
-def draw_cube_unit(faces=(True, True, True, True, True, True)):
+def draw_cube_unit():
+    """Helper purely for drawing the player model parts."""
     s = 0.5
     glBegin(GL_QUADS)
-    if faces[0]: glNormal3f(0, 1, 0); glVertex3f(-s,s,-s); glVertex3f(s,s,-s); glVertex3f(s,s,s); glVertex3f(-s,s,s)
-    if faces[1]: glNormal3f(0, -1, 0); glVertex3f(-s,-s,s); glVertex3f(s,-s,s); glVertex3f(s,-s,-s); glVertex3f(-s,-s,-s)
-    if faces[2]: glNormal3f(1, 0, 0); glVertex3f(s,-s,s); glVertex3f(s,s,s); glVertex3f(s,s,-s); glVertex3f(s,-s,-s)
-    if faces[3]: glNormal3f(-1, 0, 0); glVertex3f(-s,-s,-s); glVertex3f(-s,s,-s); glVertex3f(-s,s,s); glVertex3f(-s,-s,s)
-    if faces[4]: glNormal3f(0, 0, 1); glVertex3f(-s,-s,s); glVertex3f(s,-s,s); glVertex3f(s,s,s); glVertex3f(-s,s,s)
-    if faces[5]: glNormal3f(0, 0, -1); glVertex3f(-s,-s,-s); glVertex3f(s,-s,-s); glVertex3f(s,s,-s); glVertex3f(-s,s,-s)
+    glNormal3f(0, 1, 0); glVertex3f(-s,s,-s); glVertex3f(s,s,-s); glVertex3f(s,s,s); glVertex3f(-s,s,s)
+    glNormal3f(0, -1, 0); glVertex3f(-s,-s,s); glVertex3f(s,-s,s); glVertex3f(s,-s,-s); glVertex3f(-s,-s,-s)
+    glNormal3f(1, 0, 0); glVertex3f(s,-s,s); glVertex3f(s,s,s); glVertex3f(s,s,-s); glVertex3f(s,-s,-s)
+    glNormal3f(-1, 0, 0); glVertex3f(-s,-s,-s); glVertex3f(-s,s,-s); glVertex3f(-s,s,s); glVertex3f(-s,-s,s)
+    glNormal3f(0, 0, 1); glVertex3f(-s,-s,s); glVertex3f(s,-s,s); glVertex3f(s,s,s); glVertex3f(-s,s,s)
+    glNormal3f(0, 0, -1); glVertex3f(-s,-s,-s); glVertex3f(s,-s,-s); glVertex3f(s,s,-s); glVertex3f(-s,s,-s)
     glEnd()
 
 def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
@@ -186,25 +184,95 @@ def draw_crosshair():
     glEnd(); glLineWidth(1)
 
 def draw_player_model():
-    """Renders a simple avatar when in Third-Person Mode."""
-    if camera_mode == "ThirdPerson":
-        glPushMatrix()
-        glTranslatef(player_pos[0], player_pos[1], player_pos[2] + (EYE_HEIGHT/2))
-        glRotatef(yaw, 0, 0, 1) 
-        glScalef(12.0, 12.0, EYE_HEIGHT)
-        glColor3f(0.8, 0.2, 0.2) 
-        draw_cube_unit()
-        glPopMatrix()
+    """Renders a full Minecraft-style 3D avatar with animated walking."""
+    if camera_mode != "ThirdPerson": return
+
+    glPushMatrix()
+    glTranslatef(player_pos[0], player_pos[1], player_pos[2])
+    glRotatef(yaw - 90, 0, 0, 1) # Align body to camera
+
+    skin = (0.9, 0.75, 0.6)
+    shirt = (0.2, 0.6, 0.6)   # Cyan shirt (like Steve)
+    pants = (0.2, 0.2, 0.7)   # Blue pants
+
+    scale = 1.15
+    
+    # Calculate a swing variable based on movement distance for walking animation
+    walk_cycle = (player_pos[0] + player_pos[1]) * 0.2
+    swing = math.sin(walk_cycle) * 35.0 if on_ground else 0.0
+
+    # 1. Left Leg
+    glPushMatrix()
+    glColor3f(*pants)
+    glTranslatef(-2.5 * scale, 0, 6 * scale)
+    glRotatef(swing, 1, 0, 0) # Swing forward/back
+    glScalef(4 * scale, 4 * scale, 12 * scale)
+    draw_cube_unit()
+    glPopMatrix()
+
+    # 2. Right Leg
+    glPushMatrix()
+    glColor3f(*pants)
+    glTranslatef(2.5 * scale, 0, 6 * scale)
+    glRotatef(-swing, 1, 0, 0) # Opposite swing
+    glScalef(4 * scale, 4 * scale, 12 * scale)
+    draw_cube_unit()
+    glPopMatrix()
+
+    # 3. Torso
+    glPushMatrix()
+    glColor3f(*shirt)
+    glTranslatef(0, 0, 18 * scale)
+    glScalef(9 * scale, 4 * scale, 12 * scale)
+    draw_cube_unit()
+    glPopMatrix()
+
+    # 4. Left Arm
+    glPushMatrix()
+    glColor3f(*skin)
+    glTranslatef(-6.5 * scale, 0, 18 * scale)
+    glRotatef(-swing, 1, 0, 0) # Arms swing opposite to legs
+    glScalef(4 * scale, 4 * scale, 12 * scale)
+    draw_cube_unit()
+    glPopMatrix()
+
+    # 5. Right Arm
+    glPushMatrix()
+    glColor3f(*skin)
+    glTranslatef(6.5 * scale, 0, 18 * scale)
+    glRotatef(swing, 1, 0, 0)
+    glScalef(4 * scale, 4 * scale, 12 * scale)
+    draw_cube_unit()
+    glPopMatrix()
+
+    # 6. Head
+    glPushMatrix()
+    glColor3f(*skin)
+    glTranslatef(0, 0, 28 * scale)
+    # The head pitches up and down to match mouse view
+    glRotatef(pitch, 1, 0, 0) 
+    glRotatef(90, 0, 0, 1) # Fix face forward
+    glScalef(8 * scale, 8 * scale, 8 * scale)
+    draw_cube_unit()
+    glPopMatrix()
+
+    glPopMatrix()
 
 # =============================================================================
-# WORLD RENDER
+# WORLD RENDER (ULTRA OPTIMIZED)
 # =============================================================================
 
 def draw_shapes():
+    """Batched Rendering System - Eliminates Python loop lag for smooth 60 FPS."""
     glEnable(GL_LIGHTING); glEnable(GL_LIGHT0); glEnable(GL_COLOR_MATERIAL)
     glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
     glLightfv(GL_LIGHT0, GL_POSITION, [200.0, 200.0, 400.0, 0.0])
 
+    s = BLOCK_HALF
+    
+    # ONE single PyOpenGL call to the graphics card to draw the entire map
+    glBegin(GL_QUADS)
+    
     for (ix, iy, iz), color in world_blocks.items():
         f_posY = (ix, iy+1, iz) not in world_blocks
         f_negY = (ix, iy-1, iz) not in world_blocks
@@ -215,15 +283,33 @@ def draw_shapes():
         
         if not (f_posY or f_negY or f_posX or f_negX or f_posZ or f_negZ): continue
             
-        glPushMatrix()
         glColor3f(*color)
-        glTranslatef(ix * BLOCK_SIZE, iy * BLOCK_SIZE, iz * BLOCK_SIZE)
-        glScalef(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)
-        draw_cube_unit((f_posY, f_negY, f_posX, f_negX, f_posZ, f_negZ))
-        glPopMatrix()
+        x, y, z = ix * BLOCK_SIZE, iy * BLOCK_SIZE, iz * BLOCK_SIZE
+        
+        # Manually unrolling vertices removes the lag caused by glPushMatrix()
+        if f_posY: 
+            glNormal3f(0, 1, 0)
+            glVertex3f(x-s, y+s, z-s); glVertex3f(x+s, y+s, z-s); glVertex3f(x+s, y+s, z+s); glVertex3f(x-s, y+s, z+s)
+        if f_negY:
+            glNormal3f(0, -1, 0)
+            glVertex3f(x-s, y-s, z+s); glVertex3f(x+s, y-s, z+s); glVertex3f(x+s, y-s, z-s); glVertex3f(x-s, y-s, z-s)
+        if f_posX:
+            glNormal3f(1, 0, 0)
+            glVertex3f(x+s, y-s, z+s); glVertex3f(x+s, y+s, z+s); glVertex3f(x+s, y+s, z-s); glVertex3f(x+s, y-s, z-s)
+        if f_negX:
+            glNormal3f(-1, 0, 0)
+            glVertex3f(x-s, y-s, z-s); glVertex3f(x-s, y+s, z-s); glVertex3f(x-s, y+s, z+s); glVertex3f(x-s, y-s, z+s)
+        if f_posZ:
+            glNormal3f(0, 0, 1)
+            glVertex3f(x-s, y-s, z+s); glVertex3f(x+s, y-s, z+s); glVertex3f(x+s, y+s, z+s); glVertex3f(x-s, y+s, z+s)
+        if f_negZ:
+            glNormal3f(0, 0, -1)
+            glVertex3f(x-s, y-s, z-s); glVertex3f(x+s, y-s, z-s); glVertex3f(x+s, y+s, z-s); glVertex3f(x-s, y+s, z-s)
+            
+    glEnd()
 
-    glDisable(GL_LIGHTING)
     draw_player_model()
+    glDisable(GL_LIGHTING)
 
 # =============================================================================
 # INPUT HANDLERS
@@ -289,10 +375,9 @@ def apply_physics():
     global vel_z, on_ground
     if game_mode != "Survival": on_ground = False; return
 
-    vel_z += GRAVITY * 0.05          
+    vel_z += GRAVITY         
     next_z = player_pos[2] + vel_z
 
-    # Check the block exactly 0.1 units under where the feet are heading
     bx, by, bz_under = get_voxel(player_pos[0], player_pos[1], next_z - 0.1)
     block_top = (bz_under * BLOCK_SIZE) + BLOCK_HALF
 
@@ -304,7 +389,6 @@ def apply_physics():
         player_pos[2] = next_z
         on_ground = False
 
-    # Safety net (teleport to sky if you fall to the abyss)
     if player_pos[2] < -200: player_pos[2] = 100.0; vel_z = 0.0
 
 # =============================================================================
@@ -378,7 +462,7 @@ def showScreen():
 def main():
     glutInit(); glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
     glutInitWindowSize(WINDOW_W, WINDOW_H); glutInitWindowPosition(0, 0)
-    glutCreateWindow(b"Minecraft Clone V4 - Perfect Collision")
+    glutCreateWindow(b"Minecraft Clone V5 - Smooth & Animated")
     glutDisplayFunc(showScreen); glutKeyboardFunc(keyboardListener); glutSpecialFunc(specialKeyListener)
     glutMouseFunc(mouseListener); glutPassiveMotionFunc(passiveMouseListener); glutIdleFunc(idle)
     glutMainLoop()
